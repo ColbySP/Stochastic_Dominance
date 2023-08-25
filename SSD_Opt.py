@@ -101,7 +101,7 @@ class SSD_Portfolio:
         self.B = Synthetic(self.B_original, delta_mu, delta_sigma, delta_skew).gen()
 
     def optimize(self, time_limit: float = 60, iter_limit: int = 200) -> None:
-        """Function using linear programming approach outlined by Fabian et al. 2011b to solve for optimal weights"""
+        """Function using linear programming approach outlined by Fabian et al. 2011 to solve for optimal weights"""
         # sort benchmark returns and save indices
         r_b_i = np.argsort(self.B)
         self.B_sort = self.B[r_b_i]
