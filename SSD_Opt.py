@@ -1,8 +1,9 @@
 # imports
 from scipy.optimize import linprog
-from Synthetic import Synthetic
 import matplotlib.pyplot as plt
-import yfinance as yf
+from Synthetic import Synthetic
+from scipy import stats
+import pandas as pd
 import numpy as np
 import time
 
@@ -10,32 +11,22 @@ plt.style.use('ggplot')
 
 
 class SSD_Portfolio:
-    __slots__ = ('tickers', 'benchmark', 'start', 'end', 't', 'R', 'B_original', 'B', 'W', 'S', 'n', 'v', 'w',
-                 'B_sort', 'W_sort', 'B_original_sort', 'Y')
+    __slots__ = ('tickers', 't', 'latest_prices', 'R', 'B_original',
+                 'B', 'W', 'S', 'n', 'v', 'w', 'B_sort', 'W_sort', 'B_original_sort', 'Y')
 
-    def __init__(self, tickers: list or str, benchmark: str, start: str, end: str):
-        # check if tickers is an existing index or string of stocks instead of list
-        if isinstance(tickers, str) and tickers not in ['S&P500']:
-            self.tickers = tickers.split(' ')
-        else:
-            self.tickers = tickers
+    def __init__(self, return_dir: str, benchmark_dir: str):
+        print("Loading data ...\n")
+        # load returns data
+        df = pd.read_csv(return_dir).set_index("Date").ffill(axis=1).pct_change(1).iloc[1:]
+        self.tickers = df.columns.tolist()
+        self.R = df.values
+        self.latest_prices = self.R[-1, :]
 
-        # save benchmark ticker
-        self.benchmark = benchmark
-
-        # define start and end dates
-        self.start = start
-        self.end = end
-
-        # placeholder for timestamps
-        self.t = None
-
-        # download data and save returns as numpy arrays
-        print('Downloading portfolio components:')
-        self.R = self.download_returns(symbols=self.tickers)
-        print('\nDownloading benchmark:')
-        self.B_original = self.download_returns(symbols=self.benchmark)
+        # load reference data
+        df = pd.read_csv(benchmark_dir, parse_dates=['Date'], index_col='Date').pct_change(1)
+        self.B_original = df.values[1:].flatten()
         self.B_original_sort = np.sort(self.B_original)
+        self.t = df.index.values
 
         # placeholder for synthetic benchmark
         self.B = self.B_original
@@ -57,51 +48,12 @@ class SSD_Portfolio:
         # placeholder for cdf y_values
         self.Y = np.linspace(0, 1, num=self.S, endpoint=True)
 
-    def download_returns(self, symbols: list or str) -> np.array:
-        """Function to download, clean, and prep stock data from online database"""
-        # define common index components
-        if symbols == 'S&P500':
-            tickers = """
-            A,AAL,AAP,AAPL,ABBV,ABC,ABT,ACGL,ACN,ADBE,ADI,ADM,ADP,ADSK,AEE,AEP,AES,AFL,AIG,AIZ,AJG,AKAM,ALB,ALGN,ALK,
-            ALL,ALLE,AMAT,AMCR,AMD,AME,AMGN,AMP,AMT,AMZN,ANET,ANSS,AON,AOS,APA,APD,APH,APTV,ARE,ATO,ATVI,AVB,AVGO,AVY,
-            AWK,AXON,AXP,AZO,BA,BAC,BALL,BAX,BBWI,BBY,BDX,BEN,BF.B,BG,BIIB,BIO,BK,BKNG,BKR,BLK,BMY,BR,BRK.B,BRO,BSX,BWA,
-            BXP,C,CAG,CAH,CARR,CAT,CB,CBOE,CBRE,CCI,CCL,CDAY,CDNS,CDW,CE,CEG,CF,CFG,CHD,CHRW,CHTR,CI,CINF,CL,CLX,CMA,
-            CMCSA,CME,CMG,CMI,CMS,CNC,CNP,COF,COO,COP,COST,CPB,CPRT,CPT,CRL,CRM,CSCO,CSGP,CSX,CTAS,CTLT,CTRA,CTSH,CTVA,
-            CVS,CVX,CZR,D,DAL,DD,DE,DFS,DG,DGX,DHI,DHR,DIS,DLR,DLTR,DOV,DOW,DPZ,DRI,DTE,DUK,DVA,DVN,DXC,DXCM,EA,EBAY,
-            ECL,ED,EFX,EG,EIX,EL,ELV,EMN,EMR,ENPH,EOG,EPAM,EQIX,EQR,EQT,ES,ESS,ETN,ETR,ETSY,EVRG,EW,EXC,EXPD,EXPE,EXR,F,
-            FANG,FAST,FCX,FDS,FDX,FE,FFIV,FI,FICO,FIS,FITB,FLT,FMC,FOX,FOXA,FRT,FSLR,FTNT,FTV,GD,GE,GEHC,GEN,GILD,GIS,
-            GL,GLW,GM,GNRC,GOOG,GOOGL,GPC,GPN,GRMN,GS,GWW,HAL,HAS,HBAN,HCA,HD,HES,HIG,HII,HLT,HOLX,HON,HPE,HPQ,HRL,HSIC,
-            HST,HSY,HUM,HWM,IBM,ICE,IDXX,IEX,IFF,ILMN,INCY,INTC,INTU,INVH,IP,IPG,IQV,IR,IRM,ISRG,IT,ITW,IVZ,J,JBHT,JCI,
-            JKHY,JNJ,JNPR,JPM,K,KDP,KEY,KEYS,KHC,KIM,KLAC,KMB,KMI,KMX,KO,KR,L,LDOS,LEN,LH,LHX,LIN,LKQ,LLY,LMT,LNC,LNT,
-            LOW,LRCX,LUV,LVS,LW,LYB,LYV,MA,MAA,MAR,MAS,MCD,MCHP,MCK,MCO,MDLZ,MDT,MET,META,MGM,MHK,MKC,MKTX,MLM,MMC,MMM,
-            MNST,MO,MOH,MOS,MPC,MPWR,MRK,MRNA,MRO,MS,MSCI,MSFT,MSI,MTB,MTCH,MTD,MU,NCLH,NDAQ,NDSN,NEE,NEM,NFLX,NI,NKE,
-            NOC,NOW,NRG,NSC,NTAP,NTRS,NUE,NVDA,NVR,NWL,NWS,NWSA,NXPI,O,ODFL,OGN,OKE,OMC,ON,ORCL,ORLY,OTIS,OXY,PANW,PARA,
-            PAYC,PAYX,PCAR,PCG,PEAK,PEG,PEP,PFE,PFG,PG,PGR,PH,PHM,PKG,PLD,PM,PNC,PNR,PNW,PODD,POOL,PPG,PPL,PRU,PSA,PSX,
-            PTC,PWR,PXD,PYPL,QCOM,QRVO,RCL,REG,REGN,RF,RHI,RJF,RL,RMD,ROK,ROL,ROP,ROST,RSG,RTX,RVTY,SBAC,SBUX,SCHW,SEDG,
-            SEE,SHW,SJM,SLB,SNA,SNPS,SO,SPG,SPGI,SRE,STE,STLD,STT,STX,STZ,SWK,SWKS,SYF,SYK,SYY,T,TAP,TDG,TDY,TECH,TEL,
-            TER,TFC,TFX,TGT,TJX,TMO,TMUS,TPR,TRGP,TRMB,TROW,TRV,TSCO,TSLA,TSN,TT,TTWO,TXN,TXT,TYL,UAL,UDR,UHS,ULTA,UNH,
-            UNP,UPS,URI,USB,V,VFC,VICI,VLO,VMC,VRSK,VRSN,VRTX,VTR,VTRS,VZ,WAB,WAT,WBA,WBD,WDC,WEC,WELL,WFC,WHR,WM,WMB,
-            WMT,WRB,WRK,WST,WTW,WY,WYNN,XEL,XOM,XRAY,XYL,YUM,ZBH,ZBRA,ZION,ZTS
-            """.replace('\n', '').replace(' ', '').replace(',', ' ')
-            self.tickers = tickers.split(' ')
-            symbols = self.tickers
-
-        # download data
-        df = yf.download(tickers=symbols, start=self.start, end=self.end, interval='1d', group_by='column',
-                         progress=True)['Adj Close']
-
-        if len(df.shape) > 1:
-            return df.fillna(method='ffill', axis=1).pct_change(1).values[1:, :]
-        else:
-            self.t = df.index.values
-            return df.fillna(method='ffill', axis=0).pct_change(1).values[1:]
-
     def adjust_benchmark(self, delta_mu: float, delta_sigma: float, delta_skew: float) -> np.array:
         """Function to generate a synthetic benchmark based on the original as outlined by Valle et al. 2017"""
         self.B = Synthetic(self.B_original, delta_mu, delta_sigma, delta_skew).gen()
 
-    def optimize(self, time_limit: float = 60, iter_limit: int = 200) -> None:
-        """Function using linear programming approach outlined by Fabian et al. 2011 to solve for optimal weights"""
+    def optimize(self, time_limit: float = 60, iter_limit: int = 500) -> None:
+        """Function using linear programming approach outlined by Fabian et al. 2011b to solve for optimal weights"""
         # sort benchmark returns and save indices
         r_b_i = np.argsort(self.B)
         self.B_sort = self.B[r_b_i]
@@ -133,17 +85,17 @@ class SSD_Portfolio:
             bounds.append((0, 1))
 
         # run iterative portfolio optimization
-        print('\nComputing optimal portfolio ...')
+        print('Computing optimal portfolio ...\n')
         start_time = time.time()
         iter_num = 0
         while True:
 
             # limit computation time
             if (time.time() - start_time) > time_limit:
-                print(f'Time limit reached after {iter_num} iterations!')
+                print(f'Time limit reached after {iter_num} iterations!\n')
                 break
             if iter_num > iter_limit:
-                print(f'Iteration limit reached after {time.time() - start_time:.1f} seconds!')
+                print(f'Iteration limit reached after {time.time() - start_time:.1f} seconds!\n')
                 break
 
             # run optimization
@@ -155,7 +107,7 @@ class SSD_Portfolio:
 
             # otherwise end iteration process
             else:
-                print('Infeasible problem constraints ... returning closest solution!')
+                print('Infeasible problem constraints ... returning closest solution!\n')
                 break
 
             # construct the set J^*
@@ -164,14 +116,15 @@ class SSD_Portfolio:
             self.W_sort = self.W[J_star]
 
             # compute the residuals for each tail_i
-            residuals = np.zeros(shape=self.S)
-            for i in range(self.S):
-                residuals[i] = self.v + tau[i] - np.sum(np.dot(self.R[J_star[:i + 1], :], self.w), axis=0) / self.S
+            scaled_v = np.linspace(self.v / self.S, self.v, self.S)
+            port_tau = np.cumsum(np.dot(self.R[J_star, :], self.w)) / self.S
+            residuals = scaled_v + tau - port_tau
 
             # find the worst violation
             i_hat = np.argmax(residuals)
-            if residuals[i_hat] <= 1e-7:  # set a minor tolerance
-                print(f'Optimal portfolio achieved in {iter_num} iterations! ({time.time() - start_time:.1f}s)')
+
+            if residuals[i_hat] <= 1e-7:  # set a tolerance
+                print(f'Optimal portfolio achieved in {iter_num} iterations! ({time.time() - start_time:.1f}s)\n')
                 break
 
             # enforce worst offending tail constraint
@@ -198,13 +151,27 @@ class SSD_Portfolio:
             # increment iteration counter
             iter_num += 1
 
-    def get_weights(self, all: bool = False) -> [list[str], list[float]]:
-        """Function to return stocks and associated weights from optimal portfolio"""
-        if all:
-            return self.tickers, self.w
-        else:
-            indices = np.nonzero(self.w)
-            return np.array(self.tickers)[indices], self.w[indices]
+    def var(self, alpha: float) -> float:
+        """Function to return the value at risk of the empirical portfolio distribution for a given alpha"""
+        return np.percentile(self.W_sort, alpha * 100, method='median_unbiased')
+
+    def cvar(self, alpha: float) -> float:
+        """Function to return the conditional value at risk of the empirical portfolio distribution for a given alpha"""
+        return np.mean(self.W_sort[self.W_sort <= self.var(alpha)])
+
+    def moment(self, n: int) -> float:
+        """Function to return the nth central moment of the empirical portfolio distribution"""
+        return stats.moment(self.W, moment=n)
+
+    def get_weights(self) -> [list[str], list[float]]:
+        """Function to return stocks and associated percentage weights from optimal portfolio"""
+        indices = np.nonzero(self.w)
+        return np.array(self.tickers)[indices], self.w[indices]
+
+    def get_shares(self, cash):
+        """Function to return stocks and associated number of shares from optimal portfolio"""
+        indices = np.nonzero(self.w)
+        return np.array(self.tickers)[indices], self.w[indices] * cash / self.latest_prices[indices]
 
     def plot_cdf(self, synthetic: bool = False) -> None:
         """Function to plot the cumulative density function for each portfolio"""
@@ -262,3 +229,4 @@ class SSD_Portfolio:
         plt.xticks(rotation=45)
         plt.legend()
         plt.tight_layout()
+    
