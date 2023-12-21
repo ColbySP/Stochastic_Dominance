@@ -10,7 +10,7 @@ model = SSD_Portfolio(return_dir="sample_ret.csv", benchmark_dir="sample_ref.csv
 model.adjust_benchmark(delta_mu=0.05, delta_sigma=-0.2, delta_skew=0)
 
 # compute optimal portfolio within a time (sec) or iteration limit (#)
-model.optimize(time_limit=60, iter_limit=200)
+model.optimize(time_limit=60, iter_limit=500)
 
 # plot the pmf of returns for each portfolio
 model.plot_pmf(synthetic=True)
@@ -25,7 +25,7 @@ model.plot_returns(synthetic=True)
 model.plot_weights(N=25)
 
 # retrieve used stocks and associated weights from optimal portfolio
-tickers, weights = model.get_weights(all=False)
+tickers, weights = model.get_weights()
 print(list(zip(tickers, weights)))
 
 # display figures
