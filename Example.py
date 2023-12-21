@@ -2,8 +2,8 @@
 from SSD_Opt import SSD_Portfolio
 import matplotlib.pyplot as plt
 
-# instantiate model by defining individual stocks/index and a timeframe. This begins the download process
-model = SSD_Portfolio(tickers="S&P500", benchmark="SPY", start="2022-01-01", end="2023-01-01")
+# instantiate model by defining directories for asset returns and benchmark return data
+model = SSD_Portfolio(return_dir="sample_ret.csv", benchmark_dir="sample_ref.csv")
 
 # create a synthetic benchmark to optimize against
 # below introduces a +5% relative return, -20% relative variance, +0% relative skew synthetic over original benchmark
