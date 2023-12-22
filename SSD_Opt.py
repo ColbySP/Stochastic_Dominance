@@ -17,10 +17,10 @@ class SSD_Portfolio:
     def __init__(self, return_dir: str, benchmark_dir: str):
         print("Loading data ...\n")
         # load returns data
-        df = pd.read_csv(return_dir).set_index("Date").ffill(axis=1).pct_change(1).iloc[1:]
+        df = pd.read_csv(return_dir).set_index("Date").ffill(axis=1)
         self.tickers = df.columns.tolist()
-        self.R = df.values
-        self.latest_prices = self.R[-1, :]
+        self.R = df.pct_change(1).iloc[1:].values
+        self.latest_prices = df.iloc[-1].values
 
         # load reference data
         df = pd.read_csv(benchmark_dir, parse_dates=['Date'], index_col='Date').pct_change(1)
