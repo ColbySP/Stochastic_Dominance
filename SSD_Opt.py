@@ -135,18 +135,9 @@ class SSD_Portfolio:
             # create new b_ub row
             new_b_ub_row = -tau[i_hat]
 
-            # create new A_eq row
-            new_A_eq_row = np.ones(shape=(1, self.n + 1))
-            new_A_eq_row[:, 0] = 0
-
-            # create new b_eq row
-            new_b_eq_row = 1
-
             # append them to current constraints
             A_ub = np.vstack((A_ub, new_A_ub_row))
             b_ub = np.append(b_ub, new_b_ub_row)
-            A_eq = np.vstack((A_eq, new_A_eq_row))
-            b_eq = np.append(b_eq, new_b_eq_row)
 
             # increment iteration counter
             iter_num += 1
